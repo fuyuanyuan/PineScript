@@ -1,0 +1,58 @@
+//@version=6
+indicator(title="MACD背离分析", shorttitle="MACD背离分析", overlay=false)
+
+// 输入参数
+fast_length = input.int(12, title="Fast Length")
+slow_length = input.int(26, title="Slow Length")
+signal_length = input.int(9, title="Signal Length")
+divergence_lookback = input.int(60, title="背离检测周期范围", minval=20)
+src = input.source(close, title="Source")
+
+// 计算快速线和慢速线
+fast_ma = ta.ema(src, fast_length)  // 快速EMA
+slow_ma = ta.ema(src, slow_length)  // 慢速EMA
+
+// 计算MACD线和信号线
+macd_line = fast_ma - slow_ma           // MACD线
+signal_line = ta.ema(macd_line, signal_length)  // 信号线
+
+// 计算直方图
+histogram = macd_line - signal_line
+
+// 绘制MACD线、信号线和直方图
+plot(macd_line, title="MACD Line", color=color.blue, linewidth=1)
+plot(signal_line, title="Signal Line", color=color.orange, linewidth=1)
+plot(histogram, title="Histogram", color=(histogram >= 0 ? color.green : color.red), style=plot.style_histogram, linewidth=1)
+
+// 零线
+hline(0, title="Zero Line", color=color.gray, linewidth=1)
+
+
+// 背离检测函数
+detect_divergence() =>
+    // 寻找价格高点
+    price_high = ta.highest(high, divergence_lookback)
+    price_low = ta.lowest(low, divergence_lookback)
+    
+    // 寻找MACD极值点
+    macd_high = ta.highest(macd_line, divergence_lookback)
+    macd_low = ta.lowest(macd_line, divergence_lookback)
+    
+    // 检测看跌背离（价格新高但MACD未确认）
+    bearish_divergence = high >= price_high and macd_line < macd_high
+    
+    // 检测看涨背离（价格新低但MACD未确认）
+    bullish_divergence = low <= price_low and macd_line > macd_low
+    
+    [bullish_divergence, bearish_divergence]
+
+// 执行背离检测
+[bullish_div, bearish_div] = detect_divergence()
+
+// 绘制背离信号
+plotshape(series=bullish_div, style=shape.triangleup, location=location.belowbar, color=color.green, size=size.small, title="看涨背离", force_overlay=true)
+plotshape(series=bearish_div, style=shape.triangledown, location=location.abovebar, color=color.red, size=size.small, title="看跌背离", force_overlay=true)
+
+// 提醒功能
+alertcondition(bullish_div, title="看涨背离提醒", message="{{exchange}}:{{ticker}} 开盘{{open}}收盘{{close}}最低{{low}}最高{{high}}交易量{{volume}}")
+alertcondition(bearish_div, title="看跌背离提醒", message="{{exchange}}:{{ticker}} 开盘{{open}}收盘{{close}}最低{{low}}最高{{high}}交易量{{volume}}")
