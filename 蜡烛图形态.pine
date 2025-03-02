@@ -1,0 +1,163 @@
+//@version=6
+indicator("蜡烛图形态", overlay=true, precision=2)
+
+// ===== 全局参数与函数定义 =====
+// --- 基础参数 ---
+float body       = math.abs(close - open)                // 实体长度
+float upper      = high - math.max(close, open)          // 上影线长度
+float lower      = math.min(close, open) - low           // 下影线长度
+float rangeSize  = high - low                            // K线总范围
+bool  bullish    = close > open                          // 阳线
+bool  bearish    = close < open                          // 阴线
+
+// --- 技术指标（全局定义）---
+float atr        = ta.atr(14)                            // 波动率指标
+float volAvg     = ta.sma(volume, 5)                     // 5周期平均成交量
+float rsi        = ta.rsi(close, 14)                     // RSI(14)
+[macdLine, signalLine, _] = ta.macd(close, 12, 26, 9)    // MACD(12,26,9)
+
+// bool macdCrossOver = ta.crossover(macdLine, signalLine)   // MACD金叉
+// bool macdCrossUnder = ta.crossunder(macdLine, signalLine) // MACD死叉
+bool macdCrossOver  = true   // MACD金叉
+bool macdCrossUnder = true // MACD死叉
+float ema20 = ta.ema(close, 20)
+float ema30 = ta.ema(close, 30)
+
+bool riseEma30 = ta.rising(ema30, 3)
+bool fallEma30 = ta.falling(ema30, 3)
+
+float low5 = ta.lowest(low, 5)
+float art14 = ta.atr(14)
+
+// ===== 看涨形态 =====
+// ▶ 锤子线（需满足：超卖+放量突破）
+bool hammer = 
+   // 基础形态
+   lower >= 2.5 * body and // 下影线≥2.5倍实体
+   upper <= 0.1 * rangeSize and // 上影线较短
+   body < 0.15 * rangeSize and // 实体占比<15%
+   bearish and // 阴线
+   // 验证条件
+   macdLine > signalLine  and // MACD多头排列
+   volume[1] > volAvg[1] * 1.5 and // 成交量放大
+   rsi < 30 // RSI超卖
+
+// ▶ 看涨吞没（需满足：突破EMA+资金费率反转）
+bool bullishEngulf = 
+   // 基础形态
+   bullish and 
+   bearish[1] and
+   close > open[1] and // 覆盖前阴开盘价
+   open < close[1] and // 开盘低于前阴收盘
+   // 验证条件
+   close > ema20 and // 突破EMA
+   volume > volAvg * 1.5 // 成交量放大
+
+// ▶ 三兵形态（需满足：趋势反转+量价齐升） 
+bool threeSoldiers = 
+   // 基础形态
+   bullish and bullish[1] and bullish[2] and // 连续三阳
+   close > close[1] and close[1] > close[2] and // 收盘逐步新高
+   open <= close[1] and open[1] <= close[2] and // 开盘位于前实体内部
+   // 验证条件
+   volume > volume[1] and volume[1] > volume[2] and // 成交量递增
+   riseEma30 and // EMA向上
+   macdLine > signalLine and // MACD多头排列
+   rsi > 45// 中性强弱分界
+
+
+
+// ===== 看跌形态 =====
+// ▶ 上吊线（需满足：超买+交易所流入）
+bool hangingMan = 
+   // 基础形态
+   upper >= 2.5 * body and // 上影线≥2.5倍实体
+   lower <= 0.1 * rangeSize and // 下影线较短
+   body < 0.15 * rangeSize and // 实体占比<15%
+   bullish and // 阳线
+   // 验证条件
+   macdLine < signalLine and // MACD空头排列
+   volume > volAvg * 1.5 and // 成交量放大
+   rsi > 45 // RSI超买
+
+// ▶ 看跌吞没（需满足：跌破EMA+资金费率反转）
+bool bearishEngulf = 
+   // 基础形态
+   bearish and 
+   bullish[1] and
+   close < open[1] and // 覆盖前阳开盘价
+   open > close[1] and // 开盘高于前阳收盘
+   // 验证条件
+   close < ema20 and // 跌破EMA
+   volume > volAvg * 1.5 // 成交量放大
+
+
+// ▶ 三只乌鸦（需满足：顶部确认+杠杆清算） 
+bool threeCrows = 
+   // 基础形态
+   bearish and bearish[1] and bearish[2] and // 连续三阴
+   close < close[1] and close[1] < close[2] and // 收盘逐步新低
+   open >= close[1] and open[1] >= close[2] and // 开盘位于前实体内部
+   // 验证条件
+   volume > volume[1] and volume[1] > volume[2] and // 成交量递增（恐慌抛售）
+   fallEma30 and // EMA向下
+   macdLine < signalLine and // MACD空头排列
+   rsi < 50 and // 中性强弱分界
+   close < low5[1] // 创10周期新低
+
+
+// ===== 十字星系列模块 =====
+// ▶ 普通十字星（Neutral Doji）
+bool basicDoji = 
+   math.abs(close - open) <= 0.03 * rangeSize and // 实体<3%
+   (upper + lower) > 0.75 * rangeSize // 影线>75%
+
+// ▶ 长腿十字星（Long-Legged Doji） 
+bool longLegDoji = 
+   basicDoji and 
+   upper > 2 * atr and lower > 2 * atr // 影线>2倍ATR
+
+// ▶ 墓碑十字星（Gravestone Doji）
+bool gravestoneDoji = 
+   math.abs(close - open) <= 0.02 * rangeSize and
+   upper > 3 * atr and // 超长上影线
+   lower < 0.2 * atr // 下影线极短
+
+// ▶ 蜻蜓十字星（Dragonfly Doji） 
+bool dragonflyDoji = 
+   math.abs(close - open) <= 0.02 * rangeSize and
+   lower > 3 * atr and // 超长下影线
+   upper < 0.2 * atr // 上影线极短
+
+// ===== 验证条件模块 =====
+// ▶ 看涨验证（突破十字星高点+量能确认）
+bool dojiBullConfirm = 
+   (basicDoji[1] or longLegDoji[1] or dragonflyDoji[1]) and
+   close > high[1] and // 突破前高
+   volume > volAvg * 1.2 and // 量能放大
+   macdLine > signalLine // MACD多头排列
+
+// ▶ 看跌验证（跌破十字星低点+波动率飙升）
+bool dojiBearConfirm = 
+   (basicDoji[1] or longLegDoji[1] or gravestoneDoji[1]) and
+   close < low[1] and  // 跌破前低
+   art14/close[1] > 0.06 and // 波动率>4%
+   macdLine < signalLine // MACD空头排列
+
+
+
+// ===== 信号可视化 =====
+plotshape(hammer,          force_overlay=true, color=color.green, style=shape.arrowup,   location=location.belowbar, size=size.small, textcolor=color.yellow, text="锤子线", title="锤子线")
+plotshape(bullishEngulf,   force_overlay=true, color=color.green, style=shape.arrowup,   location=location.belowbar, size=size.small, textcolor=color.yellow, text="看涨吞没", title="看涨吞没")
+plotshape(threeSoldiers,   force_overlay=true, color=color.green, style=shape.arrowup,   location=location.belowbar, size=size.small, textcolor=color.yellow, text="三兵", title="三兵")
+plotshape(dojiBullConfirm, force_overlay=true, color=color.green, style=shape.arrowup,   location=location.belowbar, size=size.small, textcolor=color.yellow, text="看涨十字", title="看涨十字")
+
+plotshape(hangingMan,      force_overlay=true, color=color.red,   style=shape.arrowdown, location=location.abovebar, size=size.small, textcolor=color.yellow, text="上吊线", title="上吊线")
+plotshape(bearishEngulf,   force_overlay=true, color=color.red,   style=shape.arrowdown, location=location.abovebar, size=size.small, textcolor=color.yellow, text="看跌吞没", title="看跌吞没")
+plotshape(threeCrows,      force_overlay=true, color=color.red,   style=shape.arrowdown, location=location.abovebar, size=size.small, textcolor=color.yellow, text="三鸦", title="三鸦")
+plotshape(dojiBearConfirm, force_overlay=true, color=color.red, style=shape.arrowdown,   location=location.abovebar, size=size.small, textcolor=color.yellow, text="看跌十字", title="看跌十字")
+
+
+
+// ===== 辅助趋势线 =====
+plot(ta.ema(close, 20), "EMA 20", color=color.blue, linewidth=1)
