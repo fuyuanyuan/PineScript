@@ -1,0 +1,46 @@
+//@version=6
+indicator("量价指标", overlay=true)
+
+
+// 获取成交量数据
+vol = volume
+// 根据价格变化设置成交量柱的颜色
+vol_color = close > close[1] ? color.green : color.red
+// 绘制成交量柱
+plot(vol, title="Volume", color=vol_color, style=plot.style_columns, linewidth=1)
+// 计算并绘制 EMA
+ema_period = input.int(20, title="EMA Period", minval=1)
+ema_value = ta.ema(vol, ema_period)
+plot(ema_value, title="EMA", color=color.yellow, linewidth=2)
+
+
+
+// 量价背离检测
+// 参数设置
+lookback = input.int(48, "回溯周期", minval=1)
+float volumeLowest = ta.lowest(volume, lookback)
+float volumeHighest = ta.highest(volume, lookback)
+float priceLowest = ta.lowest(low, lookback)
+float priceHighest = ta.highest(high, lookback)
+// 看跌背离（价格新高，成交量下降）
+bearishDivergence = priceHighest <= high and volumeHighest > volume
+// 看涨背离（价格新低，成交量上升）
+bullishDivergence = priceLowest >= low and volumeLowest < volume 
+plotshape(bearishDivergence, "看跌背离", shape.arrowdown, location.abovebar, color=color.red, text = "S", textcolor = color.orange, size=size.small, force_overlay = true)
+plotshape(bullishDivergence, "看涨背离", shape.arrowup, location.belowbar, color=color.green, text = "B", textcolor = color.orange, size=size.small, force_overlay = true)
+
+
+// 量能突破 + RSI过滤
+// 输入参数
+lengthMA = input.int(20, "成交量均线周期", minval=1)
+rsiPeriod = input.int(14, "RSI周期", minval=1)
+volumeMultiplier = input.float(1.5, "成交量倍数", step=0.1)
+// 计算指标
+volumeMA = ta.sma(volume, lengthMA)
+rsiValue = ta.rsi(close, rsiPeriod)
+// 信号条件
+buyCondition = volume > volumeMA * volumeMultiplier and rsiValue < 30
+sellCondition = volume > volumeMA * volumeMultiplier and rsiValue > 70
+// 绘制信号
+plotshape(buyCondition, "买入信号", shape.arrowup, location.belowbar, color=color.green, text = "B", textcolor = color.red, size=size.small, force_overlay = true)
+plotshape(sellCondition, "卖出信号", shape.arrowdown, location.abovebar, color=color.red, text = "S", textcolor = color.red, size=size.small, force_overlay = true)
