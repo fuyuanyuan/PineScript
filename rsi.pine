@@ -1,5 +1,5 @@
 //@version=6
-indicator("RSI形态策略", overlay=true)
+strategy("RSI形态策略", overlay=true)
 
 // === 参数配置 ===
 rsiLen = input.int(10, "RSI周期", minval=1, tooltip="币圈建议使用较短周期8-12")
@@ -36,6 +36,7 @@ confirmedBreakout = ta.crossover(rsi, 50) and rsi[1] < 45 and rsi > 52 and close
 longCondition = rsiDoubleBottom or rsiHook or bullishDiv or oversoldBounce or confirmedBreakout
 shortCondition = rsi > rsiOverbought and rsi < rsi[1] and volRatio > 1.2 and close < open
 
+// === 可视化 ===
 // === 可视化 ===
 plotshape(longCondition, "买入信号", shape.triangleup, location.belowbar, color=color.blue, size=size.small, force_overlay = true)
 plotshape(shortCondition, "卖出信号", shape.triangledown, location.abovebar, color=color.orange, size=size.small, force_overlay = true)

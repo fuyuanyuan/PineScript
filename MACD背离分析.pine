@@ -1,0 +1,70 @@
+//@version=6
+indicator(title="MACD背离分析",overlay=false)
+
+// 输入参数 - 针对加密货币优化
+var g_macd = "MACD参数"
+var g_div = "背离检测参数"
+fast_length = input.int(8, title="快线周期", minval=5, maxval=20, group=g_macd, tooltip="加密货币推荐值: 8-12")
+slow_length = input.int(21, title="慢线周期", minval=15, maxval=30, group=g_macd, tooltip="加密货币推荐值: 17-26")
+signal_length = input.int(9, title="信号线周期", minval=5, maxval=15, group=g_macd)
+divergence_lookback = input.int(24, title="背离检测周期范围", minval=15, maxval=60, group=g_div, tooltip="短线交易推荐值: 20-40")
+src = input.source(close, title="价格源", group=g_macd)
+
+// 计算快速线和慢速线
+fast_ma = ta.ema(src, fast_length)
+slow_ma = ta.ema(src, slow_length)
+macd_line = fast_ma - slow_ma
+signal_line = ta.ema(macd_line, signal_length)
+histogram = macd_line - signal_line
+
+// 绘制MACD线、信号线和直方图 - 优化颜色
+plot(macd_line, title="MACD线", color=#2962FF, linewidth=2)
+plot(signal_line, title="信号线", color=#FF6D00, linewidth=2)
+plot(histogram, title="柱状图", color=(histogram >= 0 ? 
+     (histogram > histogram[1] ? #26A69A : #4DB6AC) : 
+     (histogram < histogram[1] ? #EF5350 : #E57373)), 
+     style=plot.style_histogram, linewidth=2)
+hline(0, title="零线", color=color.gray, linewidth=1, linestyle=hline.style_dotted)
+
+// 改进的背离检测函数 - 针对加密货币波动特性优化
+detect_divergence() =>
+    // 分段检测，提高准确性
+    recent_bars = math.floor(divergence_lookback / 2)
+    older_bars = divergence_lookback - recent_bars
+    
+    // 近期和远期价格高低点
+    recent_price_high = ta.highest(high, recent_bars)
+    recent_price_low = ta.lowest(low, recent_bars)
+    older_price_high = ta.highest(high[recent_bars], older_bars)
+    older_price_low = ta.lowest(low[recent_bars], older_bars)
+    
+    // 近期和远期MACD高低点
+    recent_macd_high = ta.highest(macd_line, recent_bars)
+    recent_macd_low = ta.lowest(macd_line, recent_bars)
+    older_macd_high = ta.highest(macd_line[recent_bars], older_bars)
+    older_macd_low = ta.lowest(macd_line[recent_bars], older_bars)
+    
+    // 加密货币优化的背离条件
+    bearish_divergence = high >= recent_price_high and recent_price_high > older_price_high and 
+                         macd_line < recent_macd_high and recent_macd_high < older_macd_high
+    
+    bullish_divergence = low <= recent_price_low and recent_price_low < older_price_low and 
+                         macd_line > recent_macd_low and recent_macd_low > older_macd_low
+    
+    [bullish_divergence, bearish_divergence]
+
+// 执行背离检测
+[bullish_div, bearish_div] = detect_divergence()
+
+
+// 绘制背离信号
+plotshape(bullish_div, style=shape.triangleup, location=location.belowbar, color=#00C853, size=size.small, title="看涨背离", force_overlay = true)
+plotshape(bearish_div, style=shape.triangledown, location=location.abovebar, color=#FF1744, size=size.small, title="看跌背离", force_overlay = true)
+
+
+
+// // 添加信息标签
+// if barstate.islast
+//     label.new(bar_index, na, text="MACD背离[加密版]\n适用于BTC/ETH短线", 
+//              style=label.style_label_down, color=color.new(color.blue, 80), 
+//              textcolor=color.white, size=size.small, yloc=yloc.abovebar)
